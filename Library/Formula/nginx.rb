@@ -2,12 +2,12 @@ require 'formula'
 
 class Nginx < Formula
   homepage 'http://nginx.org/'
-  url 'http://nginx.org/download/nginx-1.2.5.tar.gz'
-  sha1 'c36feaadbaad6938b02f4038c2d68cab10907f59'
+  url 'http://nginx.org/download/nginx-1.2.6.tar.gz'
+  sha1 '432059b668e3f018eab61f99c7cc727db88464e8'
 
   devel do
-    url 'http://nginx.org/download/nginx-1.3.8.tar.gz'
-    sha1 '84ff39e3f76e9f496f4e05080885e04caf472bb9'
+    url 'http://nginx.org/download/nginx-1.3.9.tar.gz'
+    sha1 'dcf32eaaf7e99d169ef1d202ffe1ec38215b4d98'
   end
 
   env :userpaths
@@ -81,7 +81,7 @@ class Nginx < Formula
     EOS
   end
 
-  def startup_plist; <<-EOS.undent
+  def plist; <<-EOS.undent
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
