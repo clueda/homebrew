@@ -39,7 +39,7 @@ class Formula
     # Ensure the bottle URL is set. If it does not have a checksum,
     # then a bottle is not available for the current platform.
     if @bottle and not (@bottle.checksum.nil? or @bottle.checksum.empty?)
-      @bottle.url ||= bottle_base_url + bottle_filename(self)
+      @bottle.url ||= bottle_url(self)
       if @bottle.cat_without_underscores
         @bottle.url.gsub!(MacOS.cat.to_s, MacOS.cat_without_underscores.to_s)
       end
@@ -200,10 +200,8 @@ class Formula
   def fails_with? cc
     return false if self.class.cc_failures.nil?
     cc = Compiler.new(cc) unless cc.is_a? Compiler
-    return self.class.cc_failures.find do |failure|
-      next unless failure.compiler == cc.name
-      failure.build.zero? or \
-        (failure.build >= cc.build or not ARGV.homebrew_developer?)
+    self.class.cc_failures.find do |failure|
+      failure.compiler == cc.name && failure.build >= cc.build
     end
   end
 
@@ -478,7 +476,7 @@ class Formula
       "homepage" => homepage,
       "versions" => {
         "stable" => (stable.version.to_s if stable),
-        "bottle" => bottle && MacOS.bottles_supported? || false,
+        "bottle" => bottle || false,
         "devel" => (devel.version.to_s if devel),
         "head" => (head.version.to_s if head)
       },
@@ -667,11 +665,11 @@ private
 
     def self.attr_rw(*attrs)
       attrs.each do |attr|
-        class_eval %Q{
+        class_eval <<-EOS, __FILE__, __LINE__ + 1
           def #{attr}(val=nil)
             val.nil? ? @#{attr} : @#{attr} = val
           end
-        }
+        EOS
       end
     end
 
@@ -679,7 +677,7 @@ private
     attr_rw :plist_startup, :plist_manual
 
     Checksum::TYPES.each do |cksum|
-      class_eval %Q{
+      class_eval <<-EOS, __FILE__, __LINE__ + 1
         def #{cksum}(val=nil)
           unless val.nil?
             @stable ||= SoftwareSpec.new
@@ -687,7 +685,7 @@ private
           end
           return @stable ? @stable.#{cksum} : @#{cksum}
         end
-      }
+      EOS
     end
 
     def build
