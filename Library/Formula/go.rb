@@ -12,7 +12,13 @@ class Go < Formula
   option 'cross-compile-all', "Build the cross-compilers and runtime support for all supported platforms"
   option 'cross-compile-common', "Build the cross-compilers and runtime support for darwin, linux and windows"
 
-  if build.head?
+  devel do
+    url 'https://go.googlecode.com/files/go1.1rc1.src.tar.gz'
+    version '1.1rc1'
+    sha1 'c999c36e7bb5c9ef05d309b0bb4275feb62c44e3'
+  end
+
+  unless build.stable?
     fails_with :clang do
       cause "clang: error: no such file or directory: 'libgcc.a'"
     end
@@ -20,8 +26,8 @@ class Go < Formula
 
   def install
     # install the completion scripts
-    (prefix/'etc/bash_completion.d').install 'misc/bash/go' => 'go-completion.bash'
-    (share/'zsh/site-functions').install 'misc/zsh/go' => '_go'
+    bash_completion.install 'misc/bash/go' => 'go-completion.bash'
+    zsh_completion.install 'misc/zsh/go' => '_go'
 
     if build.include? 'cross-compile-all'
       targets = [
@@ -82,9 +88,9 @@ class Go < Formula
     prefix.install(Dir['*'] - ['include'])
   end
 
-  def test
+  test do
     cd "#{prefix}/src" do
-      system './run.bash --no-rebuild'
+      system "./run.bash", "--no-rebuild"
     end
   end
 end

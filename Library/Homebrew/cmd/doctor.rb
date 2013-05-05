@@ -204,7 +204,7 @@ def check_for_broken_symlinks
   Keg::PRUNEABLE_DIRECTORIES.each do |d|
     next unless d.directory?
     d.find do |pn|
-      broken_symlinks << pn if pn.symlink? and pn.readlink.expand_path.to_s =~ /^#{HOMEBREW_PREFIX}/ and not pn.exist?
+      broken_symlinks << pn if pn.symlink? and pn.readlink.expand_path.to_s =~ /^#{HOMEBREW_PREFIX}/o and not pn.exist?
     end
   end
   unless broken_symlinks.empty? then <<-EOS.undent
@@ -307,6 +307,14 @@ def __check_subdir_access base
   end
 end
 
+def check_access_share_locale
+  __check_subdir_access 'share/locale'
+end
+
+def check_access_share_man
+  __check_subdir_access 'share/man'
+end
+
 def check_access_usr_local
   return unless HOMEBREW_PREFIX.to_s == '/usr/local'
 
@@ -322,51 +330,21 @@ def check_access_usr_local
   end
 end
 
-def check_access_share_locale
-  __check_subdir_access 'share/locale'
-end
+%w{include etc lib lib/pkgconfig share}.each do |d|
+  class_eval <<-EOS, __FILE__, __LINE__ + 1
+    def check_access_#{d.sub("/", "_")}
+      if (dir = HOMEBREW_PREFIX+'#{d}').exist? && !dir.writable_real?
+        <<-EOF.undent
+        \#{dir} isn't writable.
+        This can happen if you "sudo make install" software that isn't managed by
+        by Homebrew. If a brew tries to write a file to this directory, the
+        install will fail during the link step.
 
-def check_access_share_man
-  __check_subdir_access 'share/man'
-end
-
-def __check_folder_access base, msg
-  folder = HOMEBREW_PREFIX+base
-  if folder.exist? and not folder.writable_real?
-    <<-EOS.undent
-      #{folder} isn't writable.
-      This can happen if you "sudo make install" software that isn't managed
-      by Homebrew.
-
-      #{msg}
-
-      You should probably `chown` #{folder}
+        You should probably `chown` \#{dir}
+        EOF
+      end
+    end
     EOS
-  end
-end
-
-def check_access_pkgconfig
-  __check_folder_access 'lib/pkgconfig',
-  'If a brew tries to write a .pc file to this directory, the install will\n'+
-  'fail during the link step.'
-end
-
-def check_access_include
-  __check_folder_access 'include',
-  'If a brew tries to write a header file to this directory, the install will\n'+
-  'fail during the link step.'
-end
-
-def check_access_etc
-  __check_folder_access 'etc',
-  'If a brew tries to write a file to this directory, the install will\n'+
-  'fail during the link step.'
-end
-
-def check_access_share
-  __check_folder_access 'share',
-  'If a brew tries to write a file to this directory, the install will\n'+
-  'fail during the link step.'
 end
 
 def check_access_logs
@@ -625,41 +603,32 @@ def check_for_config_scripts
 
     EOS
 
-    config_scripts.each do |pair|
-      dn = pair[0]
-      pair[1].each do |fn|
-        s << "    #{dn}/#{fn}\n"
-      end
+    config_scripts.each do |dir, files|
+      files.each { |fn| s << "    #{dir}/#{fn}\n" }
     end
     s
   end
 end
 
-def check_for_DYLD_LIBRARY_PATH
-  if ENV['DYLD_LIBRARY_PATH']
-    <<-EOS.undent
-      Setting DYLD_LIBRARY_PATH can break dynamic linking.
-      You should probably unset it.
+def check_DYLD_vars
+  found = ENV.keys.grep(/^DYLD_/)
+  unless found.empty?
+    s = <<-EOS.undent
+    Setting DYLD_* vars can break dynamic linking.
+    Set variables:
     EOS
-  end
-end
+    found.each do |e|
+      s << "    #{e}\n"
+    end
+    if found.include? 'DYLD_INSERT_LIBRARIES'
+      s += <<-EOS.undent
 
-def check_for_DYLD_FALLBACK_LIBRARY_PATH
-  if ENV['DYLD_FALLBACK_LIBRARY_PATH']
-    <<-EOS.undent
-      Setting DYLD_FALLBACK_LIBRARY_PATH can break dynamic linking.
-      You should probably unset it.
-    EOS
-  end
-end
-
-def check_for_DYLD_INSERT_LIBRARIES
-  if ENV['DYLD_INSERT_LIBRARIES']
-    <<-EOS.undent
       Setting DYLD_INSERT_LIBRARIES can cause Go builds to fail.
       Having this set is common if you use this software:
         http://asepsis.binaryage.com/
-    EOS
+      EOS
+    end
+    s
   end
 end
 
@@ -863,7 +832,7 @@ def check_for_linked_keg_only_brews
     You may wish to `brew unlink` these brews:
 
     EOS
-    warnings.keys.each{ |f| s << "    #{f}\n" }
+    warnings.each_key { |f| s << "    #{f}\n" }
     s
   end
 end
@@ -983,9 +952,17 @@ def check_for_bad_python_symlink
 end
 
 def check_for_non_prefixed_coreutils
-  gnubin = `brew --prefix coreutils`.chomp + "/libexec/gnubin"
+  gnubin = Formula.factory('coreutils').prefix.to_s + "/libexec/gnubin"
   if paths.include? gnubin then <<-EOS.undent
     Putting non-prefixed coreutils in your path can cause gmp builds to fail.
+    EOS
+  end
+end
+
+def check_for_non_prefixed_findutils
+  default_names = Tab.for_formula('findutils').used_options.include? 'default-names'
+  if default_names then <<-EOS.undent
+    Putting non-prefixed findutils in your path can cause python builds to fail.
     EOS
   end
 end
@@ -1018,8 +995,9 @@ def check_for_outdated_homebrew
     end
 
     if Time.now.to_i - timestamp > 60 * 60 * 24 then <<-EOS.undent
-      Your Homebrew is outdated
+      Your Homebrew is outdated.
       You haven't updated for at least 24 hours, this is a long time in brewland!
+      To update Homebrew, run `brew update`.
       EOS
     end
   end
@@ -1104,7 +1082,7 @@ module Homebrew extend self
     checks = Checks.new
 
     if ARGV.include? '--list-checks'
-      checks.methods.select { |m| m =~ /^check_/ }.sort.each { |m| puts m }
+      checks.methods.grep(/^check_/).sort.each { |m| puts m }
       exit
     end
 
@@ -1115,19 +1093,22 @@ module Homebrew extend self
       checks.methods.sort << "check_for_linked_keg_only_brews" << "check_for_outdated_homebrew"
     else
       ARGV.named
-    end.select{ |method| method =~ /^check_/ }.reverse.uniq.reverse
+    end.grep(/^check_/).reverse.uniq.reverse
 
+    first_warning = true
     methods.each do |method|
       out = checks.send(method)
       unless out.nil? or out.empty?
         lines = out.to_s.split('\n')
+        puts unless first_warning
         opoo lines.shift
         Homebrew.failed = true
         puts lines
+        first_warning = false
       end
     end
 
-    puts "Your system is raring to brew." unless Homebrew.failed?
+    puts "Your system is ready to brew." unless Homebrew.failed?
   end
 
   def inject_dump_stats checks

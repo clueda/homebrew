@@ -1,13 +1,9 @@
 require 'formula'
 
-def kext_prefix
-  prefix + 'Library' + 'Extensions'
-end
-
 class Fuse4xKext < Formula
   homepage 'http://fuse4x.github.com'
-  url 'https://github.com/fuse4x/kext/tarball/fuse4x_0_9_2'
-  sha1 'ff143cd14346a6b79769b745e117949baae86705'
+  url 'https://github.com/fuse4x/kext/archive/fuse4x_0_9_2.tar.gz'
+  sha1 '4222c14b38325d9e41fb0925d2681dda3e73e861'
 
   bottle do
     # Bottle provided for Lion and newer since the Command Line Tools cannot
